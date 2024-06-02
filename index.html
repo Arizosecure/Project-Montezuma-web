@@ -1,0 +1,204 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<title>Project Montezuma </title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="assets/css/main.css" />
+		<noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+		<link rel="icon" type="image/png" href="/images/20220326_083653.jpg">
+	</head>
+	<body class="no-sidebar is-preload">
+		<div id="page-wrapper">
+
+			<!-- Header -->
+				<div id="header">
+
+					<!-- Inner -->
+						<div class="inner">
+							<header>
+								<h1><a href="/images/20220326_083653.jpg" id="logo"ArizoSecure</a></h1>
+							</header>
+						</div>
+
+					<!-- Nav -->
+					<nav id="nav">
+						<ul>
+										<li><a href="index.html">Home</a></li>
+										<li><a href="contactus.html">Contact Us</a></li>
+							<li><a href="aboutus.html">About Us</a></li>
+							<li><a href="ourservices.html">Our Services</a></li>
+							<li><a href="aidivision.html">Our AI Division</a></li>
+							<li><a href="login.php">Sign In </a></li>
+						</ul>
+					</nav>
+	
+					<!DOCTYPE html>
+					<html lang="en">
+					<head>
+						<meta charset="UTF-8">
+						<meta name="viewport" content="width=device-width, initial-scale=1.0">
+						<title>Sign-On Page</title>
+						<style>
+							body {
+								font-family: Arial, sans-serif;
+								background-color: #f4f4f4;
+								margin: 0;
+								padding: 0;
+							}
+							.wrapper {
+								padding: 20px;
+								background: #fff;
+								margin: 50px auto;
+								width: 40%;
+								border-radius: 10px;
+								box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+							}
+							.standard-input {
+								width: 100%;
+								padding: 10px;
+								margin-bottom: 10px;
+								border-radius: 5px;
+								border: 1px solid #ddd;
+							}
+							.actions {
+								list-style: none;
+								padding: 0;
+							}
+							.actions li {
+								display: inline-block;
+							}
+							.primary {
+								background: #333;
+								color: #fff;
+								padding: 10px 20px;
+								border: none;
+								border-radius: 5px;
+								cursor: pointer;
+								transition: background 0.3s ease;
+							}
+							.primary:hover {
+								background: #0779e4;
+							}
+						</style>
+						<script>
+							async function sendVerificationCode() {
+								const email = document.getElementById('email').value;
+								if (!email) {
+									alert('Please enter your email.');
+									return false;
+								}
+					
+								const emailPattern = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+								if (!emailPattern.test(email)) {
+									alert('Please enter a valid email address.');
+									return false;
+								}
+					
+								try {
+									const response = await fetch('/send_verification_code', {
+										method: 'POST',
+										headers: {
+											'Content-Type': 'application/json'
+										},
+										body: JSON.stringify({ email })
+									});
+					
+									const data = await response.json();
+									if (data.success) {
+										alert('Verification code sent to ' + email);
+										window.location.href = '/verify.html?email=' + encodeURIComponent(email);
+									} else {
+										alert('Failed to send verification code. Please try again.');
+									}
+								} catch (error) {
+									console.error('Error:', error);
+									alert('An error occurred. Please try again.');
+								}
+					
+								return false;
+							}
+						</script>
+					</head>
+					<body>
+						<article id="main">
+							<section class="wrapper style5">
+								<div class="inner">
+									<h3>Sign-On Page</h3>
+									<form class="contact-form" onsubmit="return sendVerificationCode()">
+										<div class="row gtr-uniform">
+											<div class="col-12">
+												<input type="email" name="email" id="email" placeholder="Email" class="standard-input" required>
+											</div>
+											<div class="col-12">
+												<input type="password" name="password" id="password" placeholder="Password" class="standard-input" required>
+											</div>
+											<div class="col-12">
+												<ul class="actions">
+													<li><button type="submit" class="primary">Send Verification Code</button></li>
+												</ul>
+											</div>
+										</div>
+									</form>
+								</div>
+							</section>
+						</article>
+					</body>
+					</html>
+					
+
+
+                    
+                    
+
+			<!-- Footer -->
+			<div id="footer">
+				<div class="container">
+					<div class="row">
+
+					</div>
+					<div class="row">
+						<div class="col-12">
+
+							<!-- Contact -->
+								<section class="contact">
+									<header>
+										<h3>Our Mission Statment</h3>
+									</header>
+									<p>At ArizoSecure, our mission extends beyond simply providing cybersecurity solutions. We're dedicated to serving the state of Arizona and its surrounding areas by safeguarding the digital infrastructure of businesses and organizations within our community and the beautiful state we call home. 
+									</p>
+									<ul class="icons">
+										<li><a href="https://twitter.com/ArizoSecure" class="icon brands fa-twitter"><span class="label">Twitter</span></a></li>
+										<li><a href="https://www.instagram.com/arizosecure/" class="icon brands fa-instagram"><span class="label">Instagram</span></a></li>
+										<li><a href="https://www.linkedin.com/company/arizosecure-technologies" class="icon brands fa-linkedin-in"><span class="label">Linkedin</span></a></li>
+									</ul>
+								</section>
+
+							<!-- Copyright -->
+								<div class="copyright">
+									<ul class="menu">
+										<li>&copy; Untitled. All rights reserved.</li><li>Design: <a href="https://github.com/GavinCyber">GavinCyber</a></li>
+									</ul>
+								</div>
+
+						</div>
+
+					</div>
+				</div>
+			</div>
+
+
+		</div>
+
+		<!-- Scripts -->
+			<script src="assets/js/jquery.min.js"></script>
+			<script src="assets/js/jquery.dropotron.min.js"></script>
+			<script src="assets/js/jquery.scrolly.min.js"></script>
+			<script src="assets/js/jquery.scrollex.min.js"></script>
+			<script src="assets/js/browser.min.js"></script>
+			<script src="assets/js/breakpoints.min.js"></script>
+			<script src="assets/js/util.js"></script>
+			<script src="assets/js/main.js"></script>
+
+	</body>
+</html>
