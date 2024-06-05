@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UFW Web Control</title>
+</head>
+<body>
+    <h1>UFW Web Control</h1>
+    <form action="/toggle_port" method="post">
+        <label for="port">Port:</label>
+        <input type="text" id="port" name="port" required>
+        <label for="protocol">Protocol:</label>
+        <select id="protocol" name="protocol">
+            <option value="tcp">TCP</option>
+            <option value="udp">UDP</option>
+        </select>
+        <label for="action">Action:</label>
+        <select id="action" name="action">
+            <option value="allow">Allow</option>
+            <option value="deny">Deny</option>
+        </select>
+        <button type="submit">Submit</button>
+    </form>
+    {% if request.args.get('message') %}
+        <p>{{ request.args.get('message') }}</p>
+    {% endif %}
+</body>
+</html>
