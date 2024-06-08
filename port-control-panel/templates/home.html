@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Domain Blocker & Port Management</title>
+    {% if current_user.is_authenticated %}
+        <a href="{{ url_for('logout') }}">Logout</a>
+    {% endif %}
+</head>
+<body>
+    {% if current_user.is_authenticated %}
+        <h1>Welcome, {{ current_user.username }}</h1>
+        <h2>Current Version: {{ current_version }}</h2>  <h2>Current Status</h2>
+        <ul>
+            <li><b>Blocked Domains:</b> {{ blocked_domains|length }} (See details <a href="{{ url_for('manage_domains') }}">here</a>)</li>
+            <li><b>Allowed Ports:</b> (See details <a href="{{ url_for('ports') }}">here</a>)</li>
+            <li><b>Email Support:</b> Available (Send request <a href="{{ url_for('support') }}">here</a>)</li>
+        </ul>
+        <h2>Quick Actions</h2>
+        <ul>
+            <li><a href="{{ url_for('manage_domains') }}">Manage Domains</a></li>
+            <li><a href="{{ url_for('ports') }}">Manage Ports (Caution Advised)</a></li>
+            {% if check_for_update() %}  <li><a href="{{ url_for('update') }}">Update to Version {{ latest_version }}</a></li>  {% endif %}
+        </ul>
+        <h2>Recent Activity</h2>
+        {% else %}
+        <p>You are not logged in.</p>
+        <a href="{{ url_for('login') }}">Login</a>
+    {% endif %}
+</body>
+</html>
