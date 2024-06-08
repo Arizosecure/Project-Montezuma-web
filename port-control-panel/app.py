@@ -3,8 +3,10 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, curren
 from flask_mail import Mail, Message
 import os
 import subprocess  # For ufw commands (use cautiously)
+from git import Repo
 
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Ensure this is securely set in your environment
 
 # Securely store blocklist using environment variable
 BLOCKLIST_FILE = os.getenv('BLOCKLIST_FILE', 'blocklist.txt')
@@ -23,10 +25,20 @@ class User(UserMixin):
         self.username = username
         self.password = password
 
-    # Implement methods for password verification, etc. (optional)
+# Mock user database
+users = {
+    'admin': User(id=1, username='admin', password='password')
+}
 
 login_manager = LoginManager()
 login_manager.init_app(app)
+
+@login_manager.user_loader
+def load_user(user_id):
+    for user in users.values():
+        if user.id == int(user_id):
+            return user
+    return None
 
 # Email configuration
 app.config['MAIL_SERVER'] = 'your_smtp_server'  # Replace with your actual SMTP server details
@@ -41,36 +53,43 @@ mail = Mail(app)
 @login_required
 def home():
     blocked_domains = read_blocklist()
-    return render_template('home.html', blocked_domains=blocked_domains)
+    update_message = check_for_update_message()
+    return render_template('home.html', blocked_domains=blocked_domains, update_message=update_message)
 
-@app.route('/manage_domains')
+@app.route('/manage_domains', methods=['GET', 'POST'])
 @login_required
 def manage_domains():
+    if request.method == 'POST':
+        new_domain = request.form.get('domain')
+        if new_domain:
+            blocked_domains = read_blocklist()
+            blocked_domains.append(new_domain)
+            write_blocklist(blocked_domains)
+            return redirect(url_for('manage_domains'))
     blocked_domains = read_blocklist()
     return render_template('manage_domains.html', blocked_domains=blocked_domains)
 
-# ... other routes for adding, removing, updating blocklist (same logic)
+@app.route('/remove_domain', methods=['POST'])
+@login_required
+def remove_domain():
+    domain_to_remove = request.form.get('domain')
+    blocked_domains = read_blocklist()
+    if domain_to_remove in blocked_domains:
+        blocked_domains.remove(domain_to_remove)
+        write_blocklist(blocked_domains)
+    return redirect(url_for('manage_domains'))
 
 @app.route('/ports')
 @login_required
 def ports():
-    # Get current firewall rules (careful with parsing output)
     output = subprocess.check_output(['ufw', 'status']).decode()
-    allowed_ports = []
-    for line in output.splitlines():
-        if line.startswith('Allow'):
-            allowed_ports.append(line.split()[1])  # Extract port number
+    allowed_ports = [line.split()[1] for line in output.splitlines() if line.startswith('Allow')]
     return render_template('ports.html', allowed_ports=allowed_ports)
-
-# ... other port management routes (same logic)
 
 @app.route('/users')
 @login_required
-def users():
-    # Implement user management logic (add/remove/edit users)
-    return render_template('users.html')
-
-# ... login and logout routes (same logic)
+def users_page():  # Renamed users() to users_page() to avoid name conflict
+    return render_template('users.html', users=users.values())
 
 @app.route('/support')
 @login_required
@@ -89,29 +108,26 @@ def send_support_email():
         msg.body = f"Name: {name}\nEmail: {email}\n\nMessage:\n{message}"
         try:
             mail.send(msg)
-            message = 'Your support request has been sent successfully.'
+            feedback = 'Your support request has been sent successfully.'
         except Exception as e:
-            message = f'Error sending email: {e}'
+            feedback = f'Error sending email: {e}'
     else:
-        message = 'Please fill out all fields.'
-from git import Repo
+        feedback = 'Please fill out all fields.'
+    return render_template('support.html', message=feedback)
 
 def check_for_update():
     repo = Repo('.')  # Initialize the Git repository object
-
-    # Check for remote updates (adjust URL and branch if needed)
     remote = repo.remote('origin')
     remote.update(fetch=True)
-
-    # Compare local commit hash with remote branch head
     current_hash = repo.head.commit.hexsha
     remote_hash = remote.refs.master.commit.hexsha
-
     return current_hash != remote_hash
 
-if check_for_update():
-    message = 'A new update is available!'
-else:
-    message = 'You are using the latest version.'
+def check_for_update_message():
+    if check_for_update():
+        return 'A new update is available!'
+    else:
+        return 'You are using the latest version.'
 
-    return render_template('support.html', message=message)
+if __name__ == "__main__":
+    app.run(debug=True)
