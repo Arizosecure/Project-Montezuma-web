@@ -1,128 +1,192 @@
-from flask import Flask, render_template, redirect, url_for, request, flash
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask import Flask, request, render_template, redirect, url_for, session, flash
 from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask_bcrypt import Bcrypt
+from flask_mail import Mail, Message
+from functools import wraps
 import subprocess
+import requests
+import datetime
 import os
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
+app.config['SECRET_KEY'] = 'your_secret_key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
+app.config['MAIL_SERVER'] = 'smtp.example.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'your_email@example.com'
+app.config['MAIL_PASSWORD'] = 'your_email_password'
+app.config['MAIL_DEFAULT_SENDER'] = 'your_email@example.com'
 db = SQLAlchemy(app)
+bcrypt = Bcrypt(app)
+mail = Mail(app)
 
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
+from models import User, Log
+from forms import LoginForm, DomainForm, PortForm, UpdateForm, UserForm
 
-# User model
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(150), nullable=False)
-    role = db.Column(db.String(50), nullable=False, default='user')
+BLOCKLIST_URL = 'https://raw.githubusercontent.com/your-repo/blocklist/main/domains.txt'
+UPDATE_KEY_URL = 'https://raw.githubusercontent.com/your-repo/update-key/main/key.txt'
 
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
-# Create the database and add a default admin user
-with app.app_context():
-    db.create_all()
-    if not User.query.filter_by(username='admin').first():
-        hashed_password = generate_password_hash('admin', method='sha256')
-        new_user = User(username='admin', password=hashed_password, role='admin')
-        db.session.add(new_user)
-        db.session.commit()
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = User.query.filter_by(username=username).first()
-        if user and check_password_hash(user.password, password):
-            login_user(user)
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('role') != 'admin':
             return redirect(url_for('index'))
-        flash('Invalid credentials')
-    return render_template('login.html')
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route('/')
 @login_required
 def index():
-    return render_template('index.html')
+    domain_form = DomainForm()
+    port_form = PortForm()
+    update_form = UpdateForm()
+    return render_template('index.html', domain_form=domain_form, port_form=port_form, update_form=update_form)
 
-@app.route('/block_website', methods=['POST'])
-@login_required
-def block_website():
-    if current_user.role != 'admin':
-        flash('Unauthorized action')
-        return redirect(url_for('index'))
-    website = request.form['website']
-    subprocess.run(['sudo', 'iptables', '-A', 'OUTPUT', '-p', 'tcp', '-d', website, '--dport', '80', '-j', 'DROP'])
-    subprocess.run(['sudo', 'iptables', '-A', 'OUTPUT', '-p', 'tcp', '-d', website, '--dport', '443', '-j', 'DROP'])
-    flash(f'Blocked {website}')
-    return redirect(url_for('index'))
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(username=form.username.data).first()
+        if user and bcrypt.check_password_hash(user.password, form.password.data):
+            session['logged_in'] = True
+            session['user_id'] = user.id
+            session['username'] = user.username
+            session['role'] = user.role
+            log_action(f"User {user.username} logged in")
+            return redirect(url_for('index'))
+        else:
+            flash('Login Unsuccessful. Please check username and password', 'danger')
+    return render_template('login.html', form=form)
 
-@app.route('/unblock_website', methods=['POST'])
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+@app.route('/block_domain', methods=['POST'])
 @login_required
-def unblock_website():
-    if current_user.role != 'admin':
-        flash('Unauthorized action')
+def block_domain():
+    form = DomainForm()
+    if form.validate_on_submit():
+        domain = form.domain.data
+        duration = form.duration.data
+        expiration = datetime.datetime.now() + datetime.timedelta(minutes=duration)
+        subprocess.run(['iptables', '-A', 'OUTPUT', '-p', 'tcp', '--dport', '53', '-m', 'string', '--string', domain, '--algo', 'bm', '-j', 'DROP'])
+        log_action(f"Blocked domain: {domain} for {duration} minutes")
+        send_email(f"Domain Blocked: {domain}", f"The domain {domain} has been blocked for {duration} minutes.")
         return redirect(url_for('index'))
-    website = request.form['website']
-    subprocess.run(['sudo', 'iptables', '-D', 'OUTPUT', '-p', 'tcp', '-d', website, '--dport', '80', '-j', 'DROP'])
-    subprocess.run(['sudo', 'iptables', '-D', 'OUTPUT', '-p', 'tcp', '-d', website, '--dport', '443', '-j', 'DROP'])
-    flash(f'Unblocked {website}')
-    return redirect(url_for('index'))
+    return render_template('index.html', domain_form=form)
+
+@app.route('/unblock_domain', methods=['POST'])
+@login_required
+def unblock_domain():
+    form = DomainForm()
+    if form.validate_on_submit():
+        domain = form.domain.data
+        subprocess.run(['iptables', '-D', 'OUTPUT', '-p', 'tcp', '--dport', '53', '-m', 'string', '--string', domain, '--algo', 'bm', '-j', 'DROP'])
+        log_action(f"Unblocked domain: {domain}")
+        send_email(f"Domain Unblocked: {domain}", f"The domain {domain} has been unblocked.")
+        return redirect(url_for('index'))
+    return render_template('index.html', domain_form=form)
 
 @app.route('/block_port', methods=['POST'])
 @login_required
 def block_port():
-    if current_user.role != 'admin':
-        flash('Unauthorized action')
+    form = PortForm()
+    if form.validate_on_submit():
+        port = form.port.data
+        protocol = form.protocol.data
+        duration = form.duration.data
+        expiration = datetime.datetime.now() + datetime.timedelta(minutes=duration)
+        subprocess.run(['iptables', '-A', 'INPUT', '-p', protocol, '--dport', port, '-j', 'DROP'])
+        log_action(f"Blocked port: {port}/{protocol} for {duration} minutes")
+        send_email(f"Port Blocked: {port}/{protocol}", f"The port {port}/{protocol} has been blocked for {duration} minutes.")
         return redirect(url_for('index'))
-    port = request.form['port']
-    protocol = request.form['protocol']
-    subprocess.run(['sudo', 'iptables', '-A', 'INPUT', '-p', protocol, '--dport', port, '-j', 'DROP'])
-    flash(f'Blocked port {port}/{protocol}')
-    return redirect(url_for('index'))
+    return render_template('index.html', port_form=form)
 
 @app.route('/unblock_port', methods=['POST'])
 @login_required
 def unblock_port():
-    if current_user.role != 'admin':
-        flash('Unauthorized action')
+    form = PortForm()
+    if form.validate_on_submit():
+        port = form.port.data
+        protocol = form.protocol.data
+        subprocess.run(['iptables', '-D', 'INPUT', '-p', protocol, '--dport', port, '-j', 'DROP'])
+        log_action(f"Unblocked port: {port}/{protocol}")
+        send_email(f"Port Unblocked: {port}/{protocol}", f"The port {port}/{protocol} has been unblocked.")
         return redirect(url_for('index'))
-    port = request.form['port']
-    protocol = request.form['protocol']
-    subprocess.run(['sudo', 'iptables', '-D', 'INPUT', '-p', protocol, '--dport', port, '-j', 'DROP'])
-    flash(f'Unblocked port {port}/{protocol}')
+    return render_template('index.html', port_form=form)
+
+@app.route('/update_blocklist', methods=['POST'])
+@login_required
+def update_blocklist():
+    form = UpdateForm()
+    if form.validate_on_submit():
+        update_key = requests.get(UPDATE_KEY_URL).text.strip()
+        provided_key = form.update_key.data
+        if update_key == provided_key:
+            blocklist = requests.get(BLOCKLIST_URL).text.strip().split('\n')
+            with open('/etc/dnsmasq.d/blocked_domains.conf', 'w') as f:
+                for domain in blocklist:
+                    f.write(f'address=/{domain}/0.0.0.0\n')
+            subprocess.run(['systemctl', 'restart', 'dnsmasq'])
+            log_action("Updated blocklist")
+            send_email("Blocklist Updated", "The blocklist has been updated successfully.")
+            flash('Blocklist updated successfully', 'success')
+        else:
+            flash('Invalid update key', 'danger')
     return redirect(url_for('index'))
 
-@app.route('/update_code', methods=['POST'])
-@login_required
-def update_code():
-    if current_user.role != 'admin':
-        flash('Unauthorized action')
-        return redirect(url_for('index'))
-    secret_key = request.form['secret_key']
-    if secret_key != 'your_update_secret_key':
-        flash('Invalid secret key')
-        return redirect(url_for('index'))
-    
-    try:
-        output = subprocess.run(['git', 'pull', 'origin', 'main'], capture_output=True, text=True, cwd='/path/to/your/project')
-        flash(f'Update successful: {output.stdout}')
-    except subprocess.CalledProcessError as e:
-        flash(f'Update failed: {e.stderr}')
-    
-    return redirect(url_for('index'))
+@app.route('/manage_users', methods=['GET', 'POST'])
+@admin_required
+def manage_users():
+    form = UserForm()
+    users = User.query.all()
+    if form.validate_on_submit():
+        hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
+        user = User(username=form.username.data, password=hashed_password, role=form.role.data)
+        db.session.add(user)
+        db.session.commit()
+        log_action(f"Created user: {form.username.data}")
+        send_email("New User Created", f"A new user {form.username.data} has been created.")
+        return redirect(url_for('manage_users'))
+    return render_template('manage_users.html', form=form, users=users)
+
+@app.route('/delete_user/<int:user_id>', methods=['POST'])
+@admin_required
+def delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+    db.session.delete(user)
+    db.session.commit()
+    log_action(f"Deleted user: {user.username}")
+    send_email("User Deleted", f"The user {user.username} has been deleted.")
+    return redirect(url_for('manage_users'))
+
+@app.route('/logs')
+@admin_required
+def view_logs():
+    logs = Log.query.order_by(Log.timestamp.desc()).all()
+    return render_template('logs.html', logs=logs)
+
+def log_action(action):
+    user_id = session.get('user_id')
+    log = Log(user_id=user_id, action=action)
+    db.session.add(log)
+    db.session.commit()
+
+def send_email(subject, body):
+    msg = Message(subject, recipients=[app.config['MAIL_DEFAULT_SENDER']])
+    msg.body = body
+    mail.send(msg)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

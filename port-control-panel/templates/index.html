@@ -1,69 +1,87 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Admin Dashboard</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-</head>
-<body>
-<div class="container">
-    <h2 class="mt-5">Welcome, {{ current_user.username }}</h2>
-    {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            <div class="alert alert-warning" role="alert">
-                {% for message in messages %}
-                    <p>{{ message }}</p>
-                {% endfor %}
-            </div>
-        {% endif %}
-    {% endwith %}
-    <form method="post" action="{{ url_for('block_website') }}" class="mb-3">
-        <div class="form-group">
-            <label for="website">Block Website:</label>
-            <input type="text" class="form-control" id="website" name="website" required>
-        </div>
-        <button type="submit" class="btn btn-danger">Block</button>
-    </form>
-    <form method="post" action="{{ url_for('unblock_website') }}" class="mb-3">
-        <div class="form-group">
-            <label for="website">Unblock Website:</label>
-            <input type="text" class="form-control" id="website" name="website" required>
-        </div>
-        <button type="submit" class="btn btn-success">Unblock</button>
-    </form>
-    <form method="post" action="{{ url_for('block_port') }}" class="mb-3">
-        <div class="form-group">
-            <label for="port">Block Port:</label>
-            <input type="text" class="form-control" id="port" name="port" required>
-        </div>
-        <div class="form-group">
-            <label for="protocol">Protocol:</label>
-            <select class="form-control" id="protocol" name="protocol">
-                <option value="tcp">TCP</option>
-                <option value="udp">UDP</option>
-            </select>
-        </div>
-        <button type="submit" class="btn btn-danger">Block</button>
-    </form>
-    <form method="post" action="{{ url_for('unblock_port') }}" class="mb-3">
-        <div class="form-group">
-            <label for="port">Unblock Port:</label>
-            <input type="text" class="form-control" id="port" name="port" required>
-        </div>
-        <div class="form-group">
-            <label for="protocol">Protocol:</label>
-            <select class="form-control" id="protocol" name="protocol">
-                <option value="tcp">TCP</option>
-                <option value="udp">UDP</option>
-            </select>
-        </div>
-        <button type="submit" class="btn btn-success">Unblock</button>
-    </form>
-    <form method="post" action="{{ url_for('update_code') }}" class="mb-3">
-        <div class="form-group">
-            <label for="secret_key">Update Secret Key:</label>
-            <input type="password" class="form-control" id="secret_key" name="secret_key" required>
-        </div>
-        <button type="submit" class="btn btn-primary">Update Code</button>
-    </form>
-    <form action="{{ url_for('logout') }}">
-        <button type="submit" class="btn btn-secondary">Logout</
+{% block content %}
+<h1>Welcome to Project Montezuma</h1>
+<hr>
+<h2>Manage Domains</h2>
+<form method="post" action="/block_domain">
+    {{ domain_form.hidden_tag() }}
+    <div class="form-group">
+        {{ domain_form.domain.label }}
+        {{ domain_form.domain(class="form-control") }}
+    </div>
+    <div class="form-group">
+        {{ domain_form.duration.label }}
+        {{ domain_form.duration(class="form-control") }}
+    </div>
+    <button type="submit" class="btn btn-danger">Block Domain</button>
+</form>
+
+<form method="post" action="/unblock_domain">
+    {{ domain_form.hidden_tag() }}
+    <div class="form-group">
+        {{ domain_form.domain.label }}
+        {{ domain_form.domain(class="form-control") }}
+    </div>
+    <button type="submit" class="btn btn-success">Unblock Domain</button>
+</form>
+
+<hr>
+<h2>Manage Ports</h2>
+<form method="post" action="/block_port">
+    {{ port_form.hidden_tag() }}
+    <div class="form-group">
+        {{ port_form.port.label }}
+        {{ port_form.port(class="form-control") }}
+    </div>
+    <div class="form-group">
+        {{ port_form.protocol.label }}
+        {{ port_form.protocol(class="form-control") }}
+    </div>
+    <div class="form-group">
+        {{ port_form.duration.label }}
+        {{ port_form.duration(class="form-control") }}
+    </div>
+    <button type="submit" class="btn btn-danger">Block Port</button>
+</form>
+
+<form method="post" action="/unblock_port">
+    {{ port_form.hidden_tag() }}
+    <div class="form-group">
+        {{ port_form.port.label }}
+        {{ port_form.port(class="form-control") }}
+    </div>
+    <div class="form-group">
+        {{ port_form.protocol.label }}
+        {{ port_form.protocol(class="form-control") }}
+    </div>
+    <button type="submit" class="btn btn-success">Unblock Port</button>
+</form>
+
+<hr>
+<h2>Update Blocklist</h2>
+<form method="post" action="/update_blocklist">
+    {{ update_form.hidden_tag() }}
+    <div class="form-group">
+        {{ update_form.update_key.label }}
+        {{ update_form.update_key(class="form-control") }}
+    </div>
+    <button type="submit" class="btn btn-primary">Update Blocklist</button>
+</form>
+
+<hr>
+<h2>Send Email</h2>
+<form method="post" action="/send_email">
+    <div class="form-group">
+        <label for="recipient">Recipient:</label>
+        <input type="email" class="form-control" id="recipient" name="recipient" required>
+    </div>
+    <div class="form-group">
+        <label for="subject">Subject:</label>
+        <input type="text" class="form-control" id="subject" name="subject" required>
+    </div>
+    <div class="form-group">
+        <label for="message">Message:</label>
+        <textarea class="form-control" id="message" name="message" rows="3" required></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Send Email</button>
+</form>
+{% endblock %}
