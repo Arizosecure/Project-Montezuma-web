@@ -1,133 +1,128 @@
-from flask import Flask, render_template, request, redirect, url_for
-from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
-from flask_mail import Mail, Message
+from flask import Flask, render_template, redirect, url_for, request, flash
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+import subprocess
 import os
-import subprocess  # For ufw commands (use cautiously)
-from git import Repo
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Ensure this is securely set in your environment
-
-# Securely store blocklist using environment variable
-BLOCKLIST_FILE = os.getenv('BLOCKLIST_FILE', 'blocklist.txt')
-
-def read_blocklist():
-    with open(BLOCKLIST_FILE, 'r') as f:
-        return [line.strip() for line in f.readlines()]
-
-def write_blocklist(domains):
-    with open(BLOCKLIST_FILE, 'w') as f:
-        f.writelines(domain + '\n' for domain in domains)
-
-class User(UserMixin):
-    def __init__(self, id, username, password):
-        self.id = id
-        self.username = username
-        self.password = password
-
-# Mock user database
-users = {
-    'admin': User(id=1, username='admin', password='password')
-}
+app.secret_key = 'your_secret_key'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
+db = SQLAlchemy(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# User model
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(150), nullable=False)
+    role = db.Column(db.String(50), nullable=False, default='user')
 
 @login_manager.user_loader
 def load_user(user_id):
-    for user in users.values():
-        if user.id == int(user_id):
-            return user
-    return None
+    return User.query.get(int(user_id))
 
-# Email configuration
-app.config['MAIL_SERVER'] = 'your_smtp_server'  # Replace with your actual SMTP server details
-app.config['MAIL_PORT'] = 587  # Adjust for your SMTP server
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'your_email@example.com'
-app.config['MAIL_PASSWORD'] = 'your_email_password'
+# Create the database and add a default admin user
+with app.app_context():
+    db.create_all()
+    if not User.query.filter_by(username='admin').first():
+        hashed_password = generate_password_hash('admin', method='sha256')
+        new_user = User(username='admin', password=hashed_password, role='admin')
+        db.session.add(new_user)
+        db.session.commit()
 
-mail = Mail(app)
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
+            login_user(user)
+            return redirect(url_for('index'))
+        flash('Invalid credentials')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
 
 @app.route('/')
 @login_required
-def home():
-    blocked_domains = read_blocklist()
-    update_message = check_for_update_message()
-    return render_template('home.html', blocked_domains=blocked_domains, update_message=update_message)
+def index():
+    return render_template('index.html')
 
-@app.route('/manage_domains', methods=['GET', 'POST'])
+@app.route('/block_website', methods=['POST'])
 @login_required
-def manage_domains():
-    if request.method == 'POST':
-        new_domain = request.form.get('domain')
-        if new_domain:
-            blocked_domains = read_blocklist()
-            blocked_domains.append(new_domain)
-            write_blocklist(blocked_domains)
-            return redirect(url_for('manage_domains'))
-    blocked_domains = read_blocklist()
-    return render_template('manage_domains.html', blocked_domains=blocked_domains)
+def block_website():
+    if current_user.role != 'admin':
+        flash('Unauthorized action')
+        return redirect(url_for('index'))
+    website = request.form['website']
+    subprocess.run(['sudo', 'iptables', '-A', 'OUTPUT', '-p', 'tcp', '-d', website, '--dport', '80', '-j', 'DROP'])
+    subprocess.run(['sudo', 'iptables', '-A', 'OUTPUT', '-p', 'tcp', '-d', website, '--dport', '443', '-j', 'DROP'])
+    flash(f'Blocked {website}')
+    return redirect(url_for('index'))
 
-@app.route('/remove_domain', methods=['POST'])
+@app.route('/unblock_website', methods=['POST'])
 @login_required
-def remove_domain():
-    domain_to_remove = request.form.get('domain')
-    blocked_domains = read_blocklist()
-    if domain_to_remove in blocked_domains:
-        blocked_domains.remove(domain_to_remove)
-        write_blocklist(blocked_domains)
-    return redirect(url_for('manage_domains'))
+def unblock_website():
+    if current_user.role != 'admin':
+        flash('Unauthorized action')
+        return redirect(url_for('index'))
+    website = request.form['website']
+    subprocess.run(['sudo', 'iptables', '-D', 'OUTPUT', '-p', 'tcp', '-d', website, '--dport', '80', '-j', 'DROP'])
+    subprocess.run(['sudo', 'iptables', '-D', 'OUTPUT', '-p', 'tcp', '-d', website, '--dport', '443', '-j', 'DROP'])
+    flash(f'Unblocked {website}')
+    return redirect(url_for('index'))
 
-@app.route('/ports')
+@app.route('/block_port', methods=['POST'])
 @login_required
-def ports():
-    output = subprocess.check_output(['ufw', 'status']).decode()
-    allowed_ports = [line.split()[1] for line in output.splitlines() if line.startswith('Allow')]
-    return render_template('ports.html', allowed_ports=allowed_ports)
+def block_port():
+    if current_user.role != 'admin':
+        flash('Unauthorized action')
+        return redirect(url_for('index'))
+    port = request.form['port']
+    protocol = request.form['protocol']
+    subprocess.run(['sudo', 'iptables', '-A', 'INPUT', '-p', protocol, '--dport', port, '-j', 'DROP'])
+    flash(f'Blocked port {port}/{protocol}')
+    return redirect(url_for('index'))
 
-@app.route('/users')
+@app.route('/unblock_port', methods=['POST'])
 @login_required
-def users_page():  # Renamed users() to users_page() to avoid name conflict
-    return render_template('users.html', users=users.values())
+def unblock_port():
+    if current_user.role != 'admin':
+        flash('Unauthorized action')
+        return redirect(url_for('index'))
+    port = request.form['port']
+    protocol = request.form['protocol']
+    subprocess.run(['sudo', 'iptables', '-D', 'INPUT', '-p', protocol, '--dport', port, '-j', 'DROP'])
+    flash(f'Unblocked port {port}/{protocol}')
+    return redirect(url_for('index'))
 
-@app.route('/support')
+@app.route('/update_code', methods=['POST'])
 @login_required
-def support():
-    return render_template('support.html')
+def update_code():
+    if current_user.role != 'admin':
+        flash('Unauthorized action')
+        return redirect(url_for('index'))
+    secret_key = request.form['secret_key']
+    if secret_key != 'your_update_secret_key':
+        flash('Invalid secret key')
+        return redirect(url_for('index'))
+    
+    try:
+        output = subprocess.run(['git', 'pull', 'origin', 'main'], capture_output=True, text=True, cwd='/path/to/your/project')
+        flash(f'Update successful: {output.stdout}')
+    except subprocess.CalledProcessError as e:
+        flash(f'Update failed: {e.stderr}')
+    
+    return redirect(url_for('index'))
 
-@app.route('/send_support_email', methods=['POST'])
-@login_required
-def send_support_email():
-    name = request.form.get('name')
-    email = request.form.get('email')
-    message = request.form.get('message')
-
-    if name and email and message:
-        msg = Message('Support Request from Domain Blocker', sender=email, recipients=['support@arizosecure.com'])
-        msg.body = f"Name: {name}\nEmail: {email}\n\nMessage:\n{message}"
-        try:
-            mail.send(msg)
-            feedback = 'Your support request has been sent successfully.'
-        except Exception as e:
-            feedback = f'Error sending email: {e}'
-    else:
-        feedback = 'Please fill out all fields.'
-    return render_template('support.html', message=feedback)
-
-def check_for_update():
-    repo = Repo('.')  # Initialize the Git repository object
-    remote = repo.remote('origin')
-    remote.update(fetch=True)
-    current_hash = repo.head.commit.hexsha
-    remote_hash = remote.refs.master.commit.hexsha
-    return current_hash != remote_hash
-
-def check_for_update_message():
-    if check_for_update():
-        return 'A new update is available!'
-    else:
-        return 'You are using the latest version.'
-
-if __name__ == "__main__":
-    app.run(debug=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)

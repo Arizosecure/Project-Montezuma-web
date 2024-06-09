@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+<div class="container">
+    <h2 class="mt-5">Welcome, {{ current_user.username }}</h2>
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <div class="alert alert-warning" role="alert">
+                {% for message in messages %}
+                    <p>{{ message }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+    <form method="post" action="{{ url_for('block_website') }}" class="mb-3">
+        <div class="form-group">
+            <label for="website">Block Website:</label>
+            <input type="text" class="form-control" id="website" name="website" required>
+        </div>
+        <button type="submit" class="btn btn-danger">Block</button>
+    </form>
+    <form method="post" action="{{ url_for('unblock_website') }}" class="mb-3">
+        <div class="form-group">
+            <label for="website">Unblock Website:</label>
+            <input type="text" class="form-control" id="website" name="website" required>
+        </div>
+        <button type="submit" class="btn btn-success">Unblock</button>
+    </form>
+    <form method="post" action="{{ url_for('block_port') }}" class="mb-3">
+        <div class="form-group">
+            <label for="port">Block Port:</label>
+            <input type="text" class="form-control" id="port" name="port" required>
+        </div>
+        <div class="form-group">
+            <label for="protocol">Protocol:</label>
+            <select class="form-control" id="protocol" name="protocol">
+                <option value="tcp">TCP</option>
+                <option value="udp">UDP</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-danger">Block</button>
+    </form>
+    <form method="post" action="{{ url_for('unblock_port') }}" class="mb-3">
+        <div class="form-group">
+            <label for="port">Unblock Port:</label>
+            <input type="text" class="form-control" id="port" name="port" required>
+        </div>
+        <div class="form-group">
+            <label for="protocol">Protocol:</label>
+            <select class="form-control" id="protocol" name="protocol">
+                <option value="tcp">TCP</option>
+                <option value="udp">UDP</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-success">Unblock</button>
+    </form>
+    <form method="post" action="{{ url_for('update_code') }}" class="mb-3">
+        <div class="form-group">
+            <label for="secret_key">Update Secret Key:</label>
+            <input type="password" class="form-control" id="secret_key" name="secret_key" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Update Code</button>
+    </form>
+    <form action="{{ url_for('logout') }}">
+        <button type="submit" class="btn btn-secondary">Logout</
